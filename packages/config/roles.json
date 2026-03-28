@@ -1,0 +1,4 @@
+{
+  "admin": ["addTemple", "manageUsers"],
+  "user": ["viewTemple", "bookmark"]
+}
