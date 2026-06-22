@@ -1,0 +1,5 @@
+{
+  "cities": ["Chennai", "Madurai", "Hyderabad", "Tirupati"],
+  "deities": ["Vishnu", "Shiva", "Durga", "Ganesh"],
+  "types": ["Divya Desam", "Paadal Petra Sthalam", "Other"]
+}

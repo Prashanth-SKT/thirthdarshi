@@ -1,0 +1,5 @@
+{
+  "home": {
+    "components": ["Header", "SearchBar", "TempleList"]
+  }
+}

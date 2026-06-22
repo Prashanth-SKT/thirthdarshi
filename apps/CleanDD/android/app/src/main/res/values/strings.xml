@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">TirthDarshi</string>
+   <string name="background_location_rationale">
+    We need background location access to show routes to temples in the navigation.
+</string>
+
+</resources>

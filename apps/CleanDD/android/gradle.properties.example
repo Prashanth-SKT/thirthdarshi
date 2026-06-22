@@ -1,0 +1,7 @@
+android.useAndroidX=true
+android.enableJetifier=true
+org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
+org.gradle.workers.max=2
+
+# Copy to gradle.properties (gitignored). Use your restricted Google Cloud API key.
+MAPS_API_KEY=your_google_maps_api_key

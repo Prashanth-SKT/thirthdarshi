@@ -1,0 +1,123 @@
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+project.ext.vectoricons = [
+    iconFontNames: [ 'FontAwesome.ttf' ]
+]
+project.ext.react = [
+    enableHermes: true  
+]
+apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
+
+react {
+    autolinkLibrariesWithApp()
+    nodeExecutableAndArgs.set(["node", "--max-old-space-size=3072"])
+}
+
+def enableProguardInReleaseBuilds = false
+def jscFlavor = 'org.webkit:android-jsc:+'
+
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+    ndkVersion rootProject.ext.ndkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    namespace "com.thirtdarshi.app"
+    defaultConfig {
+        applicationId "com.thirtdarshi.app"
+
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 10
+        multiDexEnabled true
+        versionName "1.0.9"
+        resConfigs "en"
+        
+        // ✅ Read Maps API Key from gradle.properties
+        def mapsApiKey = project.hasProperty("MAPS_API_KEY") ? project.property("MAPS_API_KEY") : ""
+        manifestPlaceholders = [
+            MAPS_API_KEY: mapsApiKey
+        ]
+    }
+    
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+        
+        release {
+            if (keystorePropertiesFile.exists()) {
+                storeFile rootProject.file(keystoreProperties['storeFile'].trim())
+                storePassword keystoreProperties['storePassword'].trim()
+                keyAlias keystoreProperties['keyAlias'].trim()
+                keyPassword keystoreProperties['keyPassword'].trim()
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+            shrinkResources true
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+    
+    packagingOptions {
+        pickFirst 'lib/x86/libc++_shared.so'
+        pickFirst 'lib/x86_64/libc++_shared.so'
+        pickFirst 'lib/armeabi-v7a/libc++_shared.so'
+        pickFirst 'lib/arm64-v8a/libc++_shared.so'
+    }
+}
+
+// ✅ Exclude play-services-maps from Navigation SDK module
+configurations.all {
+    exclude group: 'com.google.android.gms', module: 'play-services-maps'
+}
+
+dependencies {
+    implementation("com.facebook.react:react-android")
+    implementation 'androidx.multidex:multidex:2.0.1'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.0.4'
+    
+    // ✅ Google Maps dependencies
+    implementation "com.google.android.gms:play-services-location:21.0.1"
+    implementation "com.google.android.gms:play-services-maps:18.2.0"
+    
+    implementation project(':react-native-maps')
+
+    if (project.ext.react.get("enableHermes", false)) {
+    implementation("com.facebook.react:hermes-android")
+} else {
+    implementation jscFlavor
+}
+}
+
+apply plugin: 'com.google.gms.google-services'
