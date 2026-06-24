@@ -6,6 +6,18 @@
   <!-- ACCESS_BACKGROUND_LOCATION removed — not required for foreground navigation
        and causes Google Play rejection for non-qualifying apps -->
 
+  <!-- Required on Android 11+ so Linking can open https URLs in the browser -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:scheme="https" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:scheme="http" />
+    </intent>
+  </queries>
+
   <application
     android:name=".MainApplication"
     android:label="@string/app_name"

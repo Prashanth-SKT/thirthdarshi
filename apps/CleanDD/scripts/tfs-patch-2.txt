@@ -1,0 +1,50 @@
+OLD:
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>{labels.title}</Text>
+        <Text style={styles.subtitle}>{labels.subtitle}</Text>
+      </View>
+
+NEW:
+  const handleLogout = async () => {
+    try {
+      await auth().signOut();
+    } catch (e) {
+      Alert.alert('Error', 'Failed to logout. Please try again.');
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* Floating nav row */}
+      <View style={styles.navRow}>
+        <TouchableOpacity
+          style={styles.navBtn}
+          onPress={() => navigation.navigate('LanguageSelection')}
+          activeOpacity={0.8}
+        >
+          <FontAwesome name="arrow-left" size={14} color="#002244" />
+          <Text style={styles.navBtnText}>
+            {lang === 'te' ? 'వెనక్కి' : lang === 'ta' ? 'பின்செல்' : lang === 'hi' ? 'वापस' : 'Back'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.navBtn, styles.logoutBtn]}
+          onPress={handleLogout}
+          activeOpacity={0.8}
+        >
+          <FontAwesome name="sign-out" size={14} color="#dc2626" />
+          <Text style={[styles.navBtnText, styles.logoutBtnText]}>
+            {lang === 'te' ? 'లాగ్ అవుట్' : lang === 'ta' ? 'வெளியேறு' : lang === 'hi' ? 'लॉगआउट' : 'Logout'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>{labels.title}</Text>
+        <Text style={styles.subtitle}>{labels.subtitle}</Text>
+      </View>

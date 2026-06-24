@@ -32,8 +32,8 @@
 
 # Keep Firestore model classes - IMPORTANT: Replace with your actual package name
 # Example: if your package is com.myapp, use: -keep class com.myapp.models.** { *; }
--keep class com.yourapp.models.** { *; }
--keepclassmembers class com.yourapp.models.** { *; }
+-keep class com.thirtdarshi.app.models.** { *; }
+-keepclassmembers class com.thirtdarshi.app.models.** { *; }
 
 # ===============================
 # Firebase Auth Rules
@@ -186,10 +186,10 @@
 
 # ===============================
 # Keep all your app's custom classes
-# IMPORTANT: Replace 'com.yourapp' with your actual package name
+# IMPORTANT: Replace 'com.thirtdarshi.app' with your actual package name
 # ===============================
--keep class com.yourapp.** { *; }
--keepclassmembers class com.yourapp.** { *; }
+-keep class com.thirtdarshi.app.** { *; }
+-keepclassmembers class com.thirtdarshi.app.** { *; }
 
 # ===============================
 # General Android Rules

@@ -39,14 +39,19 @@ import {
 import { getDistance } from "geolib";
 import { LanguageContext } from "./LanguageContext";
 import firestore from "@react-native-firebase/firestore";
+import auth from "@react-native-firebase/auth";
 
 import { Dropdown } from 'react-native-element-dropdown';
 import LocationPermissionHandler from './LocationPermissionHandler';
 
 
 import LanguageText from './LanguageText';
+import AppQuickLinks from '../components/AppQuickLinks';
 import RenderHTML from 'react-native-render-html';
 import { Dimensions } from 'react-native';
+import { fetchTempleAudioUrlBestEffort } from './templeAudioUtils';
+import { useTempleAudio } from './TempleAudioContext';
+import { devLog } from '../utils/devLog';
 
 /** ---- deity icons ---- */
 import VishnuMarker from "../assets/vishnu_deity.png";
@@ -57,9 +62,6 @@ import DurgaIcon from "../assets/durga.png";
 import GaneshaIcon from "../assets/ganesha.png";
 import SubrahmanyaIcon from "../assets/subrahmanya.png";
 import ShivaLingamIcon from "../assets/shiva_lingam.png";
-
-console.log('Dropdown direct =', Dropdown);
-
 
 
 
@@ -215,6 +217,91 @@ const searchTemplesCrossLanguage = (temples, searchTerm, currentLang) => {
            cityEnMatch || cityTeMatch || nameTeRomanMatch || cityTeRomanMatch;
   });
 };
+
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const isLatinScript = (text) => {
+  const s = (text || '').trim();
+  if (!s) return false;
+  return !/[\u0C00-\u0C7F\u0B80-\u0BFF\u0900-\u097F]/.test(s);
+};
+
+/** Latin/English: short queries match word starts; longer queries allow substring */
+const latinNameMatches = (text, term) => {
+  const t = (text || '').toLowerCase().trim();
+  if (!t || !term) return false;
+  if (term.length <= 3) {
+    const re = new RegExp(`(^|\\s|[,.-])${escapeRegex(term)}`, 'i');
+    return re.test(t);
+  }
+  return t.includes(term);
+};
+
+const latinSearchNameFields = (temple) =>
+  [temple.name_en, temple.name_te_roman, isLatinScript(temple.name) ? temple.name : null].filter(Boolean);
+
+const latinSearchCityFields = (temple) =>
+  [temple.city_en, temple.city_te_roman].filter(Boolean);
+
+const scoreLatinMatch = (temple, term) => {
+  let score = 0;
+  for (const field of latinSearchNameFields(temple)) {
+    const f = field.toLowerCase();
+    if (f.startsWith(term)) score += 20;
+    else if (latinNameMatches(field, term)) score += 10;
+  }
+  if (term.length >= 4) {
+    for (const field of latinSearchCityFields(temple)) {
+      const f = field.toLowerCase();
+      if (f.startsWith(term)) score += 8;
+      else if (f.includes(term)) score += 4;
+    }
+  }
+  return score;
+};
+
+/** Name + city search for the state filter bar — script-aware */
+const searchTempleNamesCrossLanguage = (temples, searchTerm) => {
+  const raw = (searchTerm || '').trim();
+  if (!raw || raw.length < 2) return [];
+
+  if (isLatinScript(raw)) {
+    const term = raw.toLowerCase();
+    return temples
+      .map((temple) => ({ temple, score: scoreLatinMatch(temple, term) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map(({ temple }) => temple);
+  }
+
+  return temples.filter((temple) =>
+    (temple.name || '').includes(raw) ||
+    (temple.name_te || '').includes(raw) ||
+    (temple.name_ta || '').includes(raw) ||
+    (temple.name_en || '').includes(raw)
+  );
+};
+
+const pickRomanName = (tItem, teData, enData) =>
+  tItem.name_te_roman ||
+  teData.name_te_roman ||
+  teData.name_roman ||
+  enData.name_te_roman ||
+  '';
+
+const pickRomanCity = (tItem, teData, enData) =>
+  tItem.city_te_roman ||
+  teData.city_te_roman ||
+  teData.city_roman ||
+  enData.city_te_roman ||
+  '';
+
+const templeSearchPlaceholderByLang = {
+  te: 'ఆలయం పేరు టైప్ చేయండి...',
+  ta: 'கோவில் பெயரை தட்டச்சு செய்யுங்கள்...',
+  hi: 'मंदिर का नाम लिखें...',
+  en: 'Type temple name...',
+};
 const DeityMarkerPin = ({ tItem, icon, onPress }) => {
   const displayIcon = icon || VishnuMarker;
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -350,7 +437,7 @@ const PulsingUserMarker = ({ coordinate }) => {
 };
 const windowWidth = Dimensions.get('window').width;
 const DEFAULT_NEARBY_RADIUS = 50;
-// Add this BEFORE const TempleSearchScreen = ({ navigation }) => {
+// Add this BEFORE const TempleSearchScreen = ({ navigation, route }) => {
 const usePreloadImages = () => {
   const [imagesLoaded, setImagesLoaded] = useState(false);
 
@@ -374,7 +461,7 @@ const usePreloadImages = () => {
             return Image.prefetch(uri);
           })
         );
-        console.log('✅ All deity images preloaded');
+        devLog('✅ All deity images preloaded');
         setImagesLoaded(true);
       } catch (error) {
         console.error('❌ Error preloading images:', error);
@@ -388,8 +475,10 @@ const usePreloadImages = () => {
 
   return imagesLoaded;
 };
-const TempleSearchScreen = ({ navigation }) => {
+const TempleSearchScreen = ({ navigation, route }) => {
    const imagesLoaded = usePreloadImages();
+   const routeFilterType = route?.params?.filterType || 'state';
+   const routeSelectedState = route?.params?.selectedState || '';
   const [showFilterHint, setShowFilterHint] = useState(false);
   const [showMarkerHint, setShowMarkerHint] = useState(false);
   const [showDirectionHint, setShowDirectionHint] = useState(false);
@@ -421,9 +510,9 @@ const [selectedTempleFromState, setSelectedTempleFromState] = useState("");
 const [showNearestHint, setShowNearestHint] = useState(false);
 const nearestHintRef = useRef(null);
   const [selectedCity, setSelectedCity] = useState("");
-  const [selectedState, setSelectedState] = useState("");  // ← ADD THIS
+  const [selectedState, setSelectedState] = useState(routeSelectedState);
 const [filters, setFilters] = useState({ cities: [], states: [] });
-const [selectedFilterType, setSelectedFilterType] = useState("state"); // set state as default
+const [selectedFilterType, setSelectedFilterType] = useState(routeFilterType);
 
   const [selectedTemple, setSelectedTemple] = useState(null);
   const [isLoadingTemples, setIsLoadingTemples] = useState(false);
@@ -431,7 +520,22 @@ const [selectedFilterType, setSelectedFilterType] = useState("state"); // set st
 const [expandNearestList, setExpandNearestList] = useState(false);
 const [showNearestToggle, setShowNearestToggle] = useState(false);
 const [showDropdown, setShowDropdown]= useState(true)  // Default: dropdown visible
+const [showTempleList, setShowTempleList] = useState(false);
 
+  const {
+    track: sharedAudioTrack,
+    isPlaying: sharedAudioPlaying,
+    playTempleAudio,
+    syncTempleAudio,
+    togglePlayback,
+  } = useTempleAudio();
+
+  const selectedTempleAudioUrl = selectedTemple?.audioUrl || null;
+  const isSelectedTempleAudioActive = Boolean(
+    selectedTempleAudioUrl &&
+      sharedAudioTrack?.audioUrl === selectedTempleAudioUrl &&
+      sharedAudioPlaying
+  );
 
   const [routeCoords, setRouteCoords] = useState([]);
   const [routeSummary, setRouteSummary] = useState(null);
@@ -478,6 +582,14 @@ const [locationError, setLocationError] = useState(null);
     };
   }, []);
 
+  useEffect(() => {
+    if (!selectedTemple?.audioUrl) return;
+    playTempleAudio({
+      templeId: selectedTemple?.firestoreId || null,
+      audioUrl: selectedTemple.audioUrl,
+    });
+  }, [selectedTemple?.firestoreId, selectedTemple?.audioUrl]);
+
   // Debounced search function
   const debouncedSearch = useCallback((query) => {
     if (searchTimeoutRef.current) {
@@ -509,13 +621,13 @@ const requestLocationPermission = async () => {
       : PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION;
     
     const result = await check(permission);
-    console.log('📍 Location permission status:', result);
+    devLog('📍 Location permission status:', result);
     
     if (result === RESULTS.GRANTED) {
       getCurrentLocation();
     } else if (result === RESULTS.DENIED) {
       const requestResult = await request(permission);
-      console.log('📍 Permission request result:', requestResult);
+      devLog('📍 Permission request result:', requestResult);
       
       if (requestResult === RESULTS.GRANTED) {
         getCurrentLocation();
@@ -542,7 +654,7 @@ const getCurrentLocation = () => {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
       };
-      console.log('✅ Got user location:', coords);
+      devLog('✅ Got user location:', coords);
       setUserLocation(coords);
       setLocationPermissionDenied(false);
       setLocationError(null);
@@ -590,6 +702,7 @@ useEffect(() => {
             const langData = tItem[lang];
             const enData = tItem.en || {};
             const teData = tItem.te || {};
+            const taData = tItem.ta || {};
             
             const lat = parseFloat(tItem.latitude ?? tItem.lat);
             const lon = parseFloat(tItem.longitude ?? tItem.long);
@@ -609,12 +722,13 @@ useEffect(() => {
               deityType: langData?.deityType || enData.deityType || teData.deityType || "",
               name_en: enData.name || "",
               name_te: teData.name || "",
+              name_ta: taData.name || "",
               city_en: enData.city || "",
               city_te: teData.city || "",
                state_en: enData.state || "",  // ← ADD THIS
             state_te: teData.state || "",
-              name_te_roman: tItem.name_te_roman || "",
-              city_te_roman: tItem.city_te_roman || "",
+              name_te_roman: pickRomanName(tItem, teData, enData),
+              city_te_roman: pickRomanCity(tItem, teData, enData),
             };
           })
           .filter(Boolean);
@@ -625,7 +739,7 @@ useEffect(() => {
         });
 
         setAllTemples(formatted);
-        console.log(`Loaded ${formatted.length} temples with bilingual data`);
+        devLog(`Loaded ${formatted.length} temples with bilingual data`);
       } catch (error) {
         console.error('Error loading temples:', error);
       }
@@ -731,6 +845,7 @@ useEffect(() => {
           const langData = tItem[lang];
           const enData = tItem.en || {};
           const teData = tItem.te || {};
+          const taData = tItem.ta || {};
           const lat = parseFloat(tItem.latitude ?? tItem.lat);
           const lon = parseFloat(tItem.longitude ?? tItem.long);
 
@@ -748,12 +863,13 @@ useEffect(() => {
             distance: tItem.distance,
             name_en: enData.name || "",
             name_te: teData.name || "",
+            name_ta: taData.name || "",
             city_en: enData.city || "",
             city_te: teData.city || "",
             state_en: enData.state || "",  // ← ADD THIS
             state_te: teData.state || "",  // ← ADD THIS
-            name_te_roman: tItem.name_te_roman || "",
-            city_te_roman: tItem.city_te_roman || "",
+            name_te_roman: pickRomanName(tItem, teData, enData),
+            city_te_roman: pickRomanCity(tItem, teData, enData),
           };
         })
         .filter(Boolean);
@@ -858,7 +974,7 @@ useEffect(() => {
 // ✅ NEW FUNCTION: Just animate to temple, don't open cards
 // ✅ UPDATED FUNCTION: Animate to temple AND show marker hint
 const navigateToTempleMarker = (temple) => {
-  console.log('📍 Navigating to temple marker:', temple.name);
+  devLog('📍 Navigating to temple marker:', temple.name);
   
   // Close any open cards
   setSelectedTemple(null);
@@ -892,7 +1008,7 @@ const navigateToTempleMarker = (temple) => {
   }
 };
 const handleMarkerPress = async (temple) => {
-  console.log('🏛️ Marker pressed:', temple.name);
+  devLog('🏛️ Marker pressed:', temple.name);
   
   // ✅ ALWAYS close previous temple cards first
   setSelectedTemple(null);
@@ -928,7 +1044,7 @@ const handleMarkerPress = async (temple) => {
       return;
     }
 
-    console.log('🏛️ Loading temple data for:', templeId);
+    devLog('🏛️ Loading temple data for:', templeId);
     
     // Fetch temple data from Firestore
     const templeDoc = await firestore().collection('temples').doc(templeId).get();
@@ -950,10 +1066,13 @@ const handleMarkerPress = async (temple) => {
     const templeName = langData?.name || temple.name || "Unknown Temple";
     const templeCity = langData?.city || temple.city || "";
     
-    console.log('✅ Setting temple name:', templeName);
+    devLog('✅ Setting temple name:', templeName);
+
+    const audioUrl = await fetchTempleAudioUrlBestEffort(templeId, templeData, lang);
 
     setSelectedTemple({
       firestoreId: templeId,
+      audioUrl: audioUrl || null,
       basic: {
         ...temple,
         name: templeName,
@@ -972,7 +1091,7 @@ const handleMarkerPress = async (temple) => {
     setMiniCardVisible(true);
     setShowDropdown(false);
     
-    console.log('✅ Mini card now visible');
+    devLog('✅ Mini card now visible');
     
     // Calculate nearest temples
     const nearest = calculateNearestTemples(temple, allTemples);
@@ -997,7 +1116,7 @@ const loadExtendedDetails = async () => {
 
   try {
     const templeId = selectedTemple.firestoreId;
-    console.log("🔍 Fetching extended details from temple_details for:", templeId);
+    devLog("🔍 Fetching extended details from temple_details for:", templeId);
 
     // ✅ Fetch from temple_details collection (NOT temples)
     const detailsDoc = await firestore()
@@ -1015,10 +1134,10 @@ const loadExtendedDetails = async () => {
       return;
     }
 const detailsData = detailsDoc.data();
-console.log('📦 temple_details data keys:', Object.keys(detailsData));
+devLog('📦 temple_details data keys:', Object.keys(detailsData));
 
 let langDetails = detailsData[lang] || detailsData.en || detailsData.te;
-console.log('🌐 Language data keys:', Object.keys(langDetails || {}));
+devLog('🌐 Language data keys:', Object.keys(langDetails || {}));
 
 if (!langDetails) {
   console.error('No language data found in templedetails');
@@ -1054,8 +1173,8 @@ if (
   detailsHtml = detailsHtml.substring(1, detailsHtml.length - 1).trim();
 }
 
-console.log('✅ Successfully loaded extended details');
-console.log('📏 HTML length:', detailsHtml.length);
+devLog('✅ Successfully loaded extended details');
+devLog('📏 HTML length:', detailsHtml.length);
 
 setSelectedTemple(prev => ({
   ...prev,
@@ -1114,9 +1233,18 @@ setSelectedTemple(prev => ({
 
   const onSelectSuggestion = async (temple) => {
     try {
-       console.log('🔍 Suggestion selected:', temple.name);
+       devLog('🔍 Suggestion selected:', temple.name);
+      const templeId = temple.firestoreId;
+      let audioUrl = null;
+      if (templeId) {
+        const templeDoc = await firestore().collection('temples').doc(templeId).get();
+        if (templeDoc.exists) {
+          audioUrl = await fetchTempleAudioUrlBestEffort(templeId, templeDoc.data(), lang);
+        }
+      }
       setSelectedTemple({ 
-        firestoreId: temple.firestoreId, 
+        firestoreId: temple.firestoreId,
+        audioUrl: audioUrl || null,
         basic: temple 
       });
       
@@ -1129,11 +1257,11 @@ setSelectedTemple(prev => ({
         }, 1000);
       }
       
-      fetchRouteToTemple(temple.coords);
+      // Route fetched only when user explicitly taps the navigation button
          // ← ADD THIS: Calculate and show nearest temples
-    console.log('📍 Calculating nearest temples from:', temple.firestoreId); // ← ADD THIS
+    devLog('📍 Calculating nearest temples from:', temple.firestoreId); // ← ADD THIS
     const nearest = calculateNearestTemples(temple, allTemples);
-    console.log('🗺️ Found nearest temples:', nearest.length);
+    devLog('🗺️ Found nearest temples:', nearest.length);
    
     setNearestTemples(nearest);
     setShowNearestHint(true);
@@ -1191,12 +1319,12 @@ const displayTemples = useMemo(() => {
   
   return combined.slice(0, 200);
 }, [temples, nearestTemples, selectedTemple]); // ← Add selectedTemple as dependency
-console.log('🗺️ DEBUG INFO:');
-console.log('- displayTemples count:', displayTemples.length);
-console.log('- temples count:', temples.length);
-console.log('- selectedState:', selectedState);
-console.log('- selectedFilterType:', selectedFilterType);
-console.log('- First 3 temples:', displayTemples.slice(0, 3).map(t => ({
+devLog('🗺️ DEBUG INFO:');
+devLog('- displayTemples count:', displayTemples.length);
+devLog('- temples count:', temples.length);
+devLog('- selectedState:', selectedState);
+devLog('- selectedFilterType:', selectedFilterType);
+devLog('- First 3 temples:', displayTemples.slice(0, 3).map(t => ({
   name: t.name,
   coords: t.coords,
   firestoreId: t.firestoreId
@@ -1295,7 +1423,7 @@ const renderHTML = useCallback((htmlContent) => {
   
   // ✅ Extract background color BEFORE cleaning HTML
   const bgColor = extractBackgroundColor(htmlContent);
-  console.log('Extracted background color:', bgColor);
+  devLog('Extracted background color:', bgColor);
   
   // Clean up the HTML - remove wrapper tags AND style tags
   let cleanedHTML = htmlContent
@@ -1421,7 +1549,7 @@ const calculateNearestTemples = (selectedTemple, allTemplesForCalculation) => {
       .sort((a, b) => a.distanceToSelected - b.distanceToSelected)
       .slice(0, 5); // Get top 5 nearest temples
 
-    console.log('Calculated nearest temples within 50km:', templesWithDistance.length);
+    devLog('Calculated nearest temples within 50km:', templesWithDistance.length);
     return templesWithDistance;
   } catch (error) {
     console.error('Error calculating nearest temples:', error);
@@ -1470,7 +1598,7 @@ return (
 
  {imagesLoaded && displayTemples.map((tItem, idx) => {
   if (!tItem.coords) {
-    console.log('❌ Temple missing coords:', tItem.name);
+    devLog('❌ Temple missing coords:', tItem.name);
     return null;
   }
   
@@ -1519,260 +1647,192 @@ return (
       </View>
     )}
 
-    {/* ✅ TOOLTIP #1: Filter Selection Hint (wraps only the filter bar) */}
-    {/* ✅ FIXED: Tooltip wraps reference element only, dropdown renders in separate container */}
+    {/* ===== COMPACT TOP BAR ===== */}
     {showDropdown && (
-<View pointerEvents="box-none" style={styles.floatTopWrap}>
-  <View ref={filterRef} style={styles.floatCard}>
-    <View style={styles.row}>
-      <Dropdown
-  style={styles.ddSm}
-  containerStyle={[styles.ddContainer,{fontFamily}]}
-  placeholderStyle={[styles.ddPlaceholderSm, { fontFamily }]}
-  selectedTextStyle={[styles.ddSelectedSm, { fontFamily }]}
-  itemTextStyle={[styles.ddItemTextSm, { fontFamily }]} 
-  itemContainerStyle={[styles.ddItemContainer,{fontFamily}]}
-  activeColor="#F3F4F6"
-  dropdownPosition="auto"
-  maxHeight={280}
-  data={[
-    { label: ui.selectFilter, value: "" },
-    // { label: ui.city, value: "city" },  // ← COMMENTED OUT
-    { label: ui.state, value: "state" }, 
-    { label: ui.nearby, value: "nearby" },
-    // { label: ui.all, value: "all" },  // ← COMMENTED OUT
-  ]}
-  labelField="label"
-  valueField="value"
-  placeholder={ui.selectFilter}
-  value={selectedFilterType}
-  onChange={(item) => {
-    setSelectedFilterType(item.value);
-    setShowFilterHint(false);
-  }}
-  renderRightIcon={() => (
-    <FontAwesome name="chevron-down" size={12} color="#6B7280" />
-  )}
-  renderItem={(row) => (
-    <View style={styles.ddItemContainer}>
-      <LanguageText style={styles.ddItemTextSm}>{row.label}</LanguageText>
-    </View>
-  )}
-  renderSelectedItem={(row) =>
-    row ? (
-      <LanguageText numberOfLines={1} style={styles.ddSelectedSm}>
-        {row.label}
-      </LanguageText>
-    ) : null
-  }
-/>
+    <View pointerEvents="box-none" style={styles.floatTopWrap}>
+      <View ref={filterRef} style={styles.floatCard}>
 
-
-      {/* {selectedFilterType === "city" && (
-        <Dropdown
-          style={[styles.ddSm, { marginLeft: 6 }]}
-          containerStyle={styles.ddContainer}
-          placeholderStyle={styles.ddPlaceholderSm}
-          selectedTextStyle={[styles.ddSelectedSm,{fontFamily}]}
-          itemTextStyle={styles.ddItemTextSm}
-          itemContainerStyle={styles.ddItemContainer}
-          activeColor="#F3F4F6"
-          dropdownPosition="auto"  // ✅ Changed from "bottom"
-          maxHeight={280}
-          data={filters.cities.map((c) => ({ label: c, value: c }))}
-          labelField="label"
-          valueField="value"
-          placeholder={ui.selectCity}
-          value={selectedCity}
-          onChange={(item) => setSelectedCity(item.value)}
-          renderRightIcon={() => (
-            <FontAwesome name="chevron-down" size={12} color="#6B7280" />
-          )}
-          renderItem={(row) => (
-            <View style={styles.ddItemContainer}>
-              <LanguageText style={styles.ddItemTextSm}>{row.label}</LanguageText>
-            </View>
-          )}
-          renderSelectedItem={(row) =>
-            row ? (
-              <LanguageText numberOfLines={1} style={styles.ddSelectedSm}>
-                {row.label}
-              </LanguageText>
-            ) : null
-          }
-          
-        />
-      )} */}
-      {/* State Dropdown - ADD THIS BLOCK */}
-  {/* NEW: Temple Selection Dropdown - Shows temples from selected state */}
-
-
- {/* State Dropdown - ADD THIS BLOCK */}
-{selectedFilterType === "state" && (
-  <Dropdown
-    style={[styles.ddSm, { marginLeft: 6 }]}
-    containerStyle={[styles.ddContainer, { width: '95%', maxHeight: 180 }]}
-    placeholderStyle={styles.ddPlaceholderSm}
-    selectedTextStyle={[styles.ddSelectedSm, { fontFamily }]}
-    itemTextStyle={styles.ddItemTextSm}
-    itemContainerStyle={styles.ddItemContainer}
-    activeColor="#F3F4F6"
-    dropdownPosition="auto"
-    maxHeight={180}
-    data={filters.states.map((s) => ({ label: s, value: s }))}
-    labelField="label"
-    valueField="value"
-    placeholder={ui.selectState}
-    value={selectedState}
-    onChange={(item) => {
-      setSelectedState(item.value);
-      setSelectedTempleFromState(""); // Reset temple selection when state changes
-    }}
-    renderRightIcon={() => (
-      <FontAwesome name="chevron-down" size={12} color="#6B7280" />
-    )}
-    renderItem={(row) => (
-      <View style={styles.ddItemContainer}>
-        <LanguageText 
-          style={styles.ddItemTextSm}
-          numberOfLines={1}
-          ellipsizeMode="tail"
-        >
-          {row.label}
-        </LanguageText>
-      </View>
-    )}
-    renderSelectedItem={(row) =>
-      row ? (
-        <LanguageText 
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          style={styles.ddSelectedSm}
-        >
-          {row.label}
-        </LanguageText>
-      ) : null
-    }
-  />
-)}
-
-{/* Temple Selection Dropdown - Shows temples from selected state */}
-{/* Temple Selection Dropdown - Shows temples from selected state */}
-{selectedFilterType === "state" && selectedState && temples.length > 0 && (
-  <View style={{ width: '30%',flex: 0, marginLeft: 6 }}>
-    <Dropdown
-      style={[styles.ddSm, { flex: 1, width: '100%' }]}
-      containerStyle={[styles.ddContainer, { width: '100%', maxHeight: 180 }]}
-      placeholderStyle={styles.ddPlaceholderSm}
-      selectedTextStyle={[styles.ddSelectedSm, { fontFamily }]}
-      itemTextStyle={styles.ddItemTextSm}
-      itemContainerStyle={styles.ddItemContainer}
-      activeColor="#F3F4F6"
-      dropdownPosition="auto"
-      search
-      searchPlaceholder={lang === 'te' ? 'ఆలయం వెతకండి...' : 'Search temple...'}
-      data={temples.map((t) => ({ 
-        label: t.name, 
-        value: t.firestoreId 
-      }))}
-      labelField="label"
-      valueField="value"
-      placeholder={lang === 'te' ? 'ఆలయం ఎంచుకోండి' : 'Select Temple'}
-      value={selectedTempleFromState}
-      onChange={(item) => {
-        setSelectedTempleFromState(item.value);
-        const temple = temples.find(t => t.firestoreId === item.value);
-        if (temple) {
-          // ✅ CHANGED: Use navigateToTempleMarker instead of handleMarkerPress
-          navigateToTempleMarker(temple);
-        }
-      }}
-      renderRightIcon={() => (
-        <FontAwesome name="chevron-down" size={12} color="#6B7280" />
-      )}
-      renderItem={(row) => (
-        <View style={styles.ddItemContainer}>
-          <LanguageText 
-            style={styles.ddItemTextSm}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {row.label}
-          </LanguageText>
-        </View>
-      )}
-      renderSelectedItem={(row) =>
-        row ? (
-          <LanguageText 
-            numberOfLines={1}
-            ellipsizeMode="tail"
-            style={styles.ddSelectedSm}
-          >
-            {row.label}
-          </LanguageText>
-        ) : null
-      }
-    />
-  </View>
-)}
-
-    </View>
-
-    {selectedFilterType === "all" && (
-      <View style={[styles.row, { marginTop: 6 }]}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder={ui.searchPlaceholder}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCorrect={false}
-          autoCapitalize="none"
-        />
-      </View>
-    )}
-  </View>
-
-  {/* ✅ NEW: Show tooltip hint as floating overlay instead of wrapper */}
- {/* ✅ Show tooltip hint with TOP placement */}
-{showFilterHint && (
-  <View style={styles.filterHintOverlay}>
-    <View style={styles.filterHintCard}>
-      <Text style={styles.filterHintText}>
-        {lang === 'te' 
-          ? 'మ్యాప్‌లో ఆలయాలను చూపించడానికి ఫిల్టర్ ఎంచుకోండి' 
-          : 'Select a filter to show temples on the map'}
-      </Text>
-      <TouchableOpacity
-        style={styles.hintCloseBtn}
-        onPress={() => setShowFilterHint(false)}
-      >
-        <Text style={styles.hintCloseBtnText}>✕</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-)}
-
-
-{/*  
-  {selectedFilterType === "all" && suggestions.length > 0 && searchQuery.length >= 3 && (
-    <View style={styles.suggestPopover}>
-      <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 220 }}>
-        {suggestions.map((sug, idx) => (
+        {/* Back | Filter chip | Change | Logout */}
+        <View style={styles.filterChipRow}>
           <TouchableOpacity
-            key={`${sug.firestoreId}-${idx}`}
-            onPress={() => onSelectSuggestion(sug)}
-            style={styles.suggestItem}
+            style={styles.navIconBtn}
+            onPress={() => navigation.navigate('TempleFilter')}
+            activeOpacity={0.8}
           >
-            <LanguageText style={styles.suggestTitle}>{sug.name}</LanguageText>
-            <LanguageText style={styles.suggestMeta}>{sug.city}</LanguageText>
+            <FontAwesome name="arrow-left" size={12} color="#002244" />
+            <Text style={styles.navIconBtnText}>
+              {lang === 'te' ? 'వెనక్కి' : lang === 'ta' ? 'பின்' : lang === 'hi' ? 'वापस' : 'Back'}
+            </Text>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  )} */}
-</View>
-)}
 
+          <View style={styles.filterChip}>
+            <FontAwesome
+              name={selectedFilterType === 'nearby' ? 'location-arrow' : 'map-marker'}
+              size={12}
+              color="#002244"
+            />
+            <LanguageText style={styles.filterChipText} numberOfLines={1}>
+              {selectedFilterType === 'nearby'
+                ? (ui.nearby || 'Nearby')
+                : (selectedState || ui.state || 'By State')}
+            </LanguageText>
+          </View>
+
+          <TouchableOpacity
+            style={styles.changeFilterBtn}
+            onPress={() => navigation.navigate('TempleFilter')}
+          >
+            <FontAwesome name="sliders" size={12} color="#002244" />
+            <Text style={styles.changeFilterText}>
+              {lang === 'te' ? 'మార్చు' : lang === 'ta' ? 'மாற்று' : lang === 'hi' ? 'बदलें' : 'Change'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.logoutIconBtn}
+            onPress={async () => {
+              try { await auth().signOut(); } catch (e) { /* ignore */ }
+            }}
+            activeOpacity={0.8}
+          >
+            <FontAwesome name="sign-out" size={12} color="#dc2626" />
+            <Text style={styles.logoutIconBtnText}>
+              {lang === 'te' ? 'లాగ్అవుట్' : lang === 'ta' ? 'வெளியேறு' : lang === 'hi' ? 'लॉगआउट' : 'Logout'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Search bar + Browse list button — only for state filter */}
+        {selectedFilterType === 'state' && selectedState ? (
+          <View style={[styles.row, { marginTop: 8 }]}>
+            <FontAwesome name="search" size={13} color="#9CA3AF" style={{ marginRight: 8 }} />
+            <TextInput
+              style={[styles.searchInput, { flex: 1, fontFamily }]}
+              placeholder={templeSearchPlaceholderByLang[lang] || templeSearchPlaceholderByLang.en}
+              placeholderTextColor="#9CA3AF"
+              value={searchQuery}
+              onChangeText={(q) => {
+                setSearchQuery(q);
+                const matches = searchTempleNamesCrossLanguage(temples, q);
+                setSuggestions(matches.slice(0, 15));
+              }}
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => { setSearchQuery(''); setSuggestions([]); }}
+                style={{ marginLeft: 6 }}
+              >
+                <FontAwesome name="times-circle" size={16} color="#9CA3AF" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.browseListBtn}
+              onPress={() => { setShowTempleList(true); setSearchQuery(''); setSuggestions([]); }}
+            >
+              <FontAwesome name="list" size={13} color="#fff" />
+              <Text style={styles.browseListBtnText}>
+                {lang === 'te' ? 'జాబితా' : lang === 'ta' ? 'பட்டியல்' : lang === 'hi' ? 'सूची' : 'List'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* Live suggestions popover */}
+        {suggestions.length > 0 && searchQuery.length >= 2 && (
+          <View style={styles.suggestPopover}>
+            <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 220 }}>
+              {suggestions.map((sug, idx) => (
+                <TouchableOpacity
+                  key={`${sug.firestoreId}-${idx}`}
+                  onPress={() => {
+                    onSelectSuggestion(sug);
+                    setSearchQuery('');
+                    setSuggestions([]);
+                  }}
+                  style={styles.suggestItem}
+                >
+                  <LanguageText style={styles.suggestTitle}>{sug.name}</LanguageText>
+                  <LanguageText style={styles.suggestMeta}>
+                    {isLatinScript(searchQuery)
+                      ? [sug.name_en, sug.city_en].filter(Boolean).join(' · ') || sug.city
+                      : sug.city}
+                  </LanguageText>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+      </View>
+    </View>
+    )}
+
+
+    {/* ========== BROWSE TEMPLE LIST PANEL ========== */}
+    {showTempleList && temples.length > 0 && (
+      <View style={styles.templeListPanel}>
+        {/* Panel header */}
+        <View style={styles.templeListHeader}>
+          <View>
+            <Text style={styles.templeListTitle}>
+              {lang === 'te' ? 'ఆలయాల జాబితా' : lang === 'ta' ? 'கோவில் பட்டியல்' : lang === 'hi' ? 'मंदिर सूची' : 'Temple List'}
+            </Text>
+            <Text style={styles.templeListCount}>
+              {temples.length}{' '}
+              {lang === 'te' ? 'ఆలయాలు' : lang === 'ta' ? 'கோவில்கள்' : lang === 'hi' ? 'मंदिर' : 'temples'}
+              {selectedState ? ` · ${selectedState}` : ''}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.templeListCloseBtn}
+            onPress={() => setShowTempleList(false)}
+          >
+            <FontAwesome name="times" size={16} color="#374151" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Scrollable temple list */}
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          style={{ flex: 1 }}
+        >
+          {temples.map((t, idx) => (
+            <TouchableOpacity
+              key={`list-${t.firestoreId || idx}`}
+              style={styles.templeListItem}
+              onPress={() => {
+                setShowTempleList(false);
+                navigateToTempleMarker(t, { showOnlySelected: false });
+                if (mapRef.current && t.coords) {
+                  mapRef.current.animateToRegion({
+                    latitude: t.coords.latitude,
+                    longitude: t.coords.longitude,
+                    latitudeDelta: 0.05,
+                    longitudeDelta: 0.05,
+                  }, 800);
+                }
+              }}
+            >
+              <View style={styles.templeListItemRank}>
+                <Text style={styles.templeListItemRankText}>{idx + 1}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <LanguageText style={styles.templeListItemName} numberOfLines={1}>
+                  {t.name}
+                </LanguageText>
+                <LanguageText style={styles.templeListItemCity} numberOfLines={1}>
+                  {t.city}{t.mainDeity ? ` · ${t.mainDeity}` : ''}
+                </LanguageText>
+              </View>
+              <FontAwesome name="chevron-right" size={12} color="#9CA3AF" />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    )}
 
     {/* ✅ TOOLTIP #2: Marker Hint (floating overlay, doesn't wrap anything) */}
     {showMarkerHint && displayTemples.length > 0 && (
@@ -1941,8 +2001,15 @@ return (
       onPress={() => {
         setShowDirectionHint(false);
         navigation.navigate("Navigation", {
+          templeId: selectedTemple.firestoreId,
           name: selectedTemple.basic.name,
           coords: selectedTemple.basic.coords,
+          audioUrl: selectedTemple.audioUrl || null,
+          autoPlayAudio: Boolean(
+            selectedTemple.audioUrl &&
+              sharedAudioTrack?.audioUrl === selectedTemple.audioUrl &&
+              sharedAudioPlaying
+          ),
         });
       }}
     >
@@ -2013,11 +2080,40 @@ return (
 
     {/* View Full Details button */}
     <View style={styles.showMoreButtonContainer}>
+      {selectedTemple?.audioUrl ? (
+        <TouchableOpacity
+          style={styles.inlineAudioBtn}
+          onPress={() => {
+            syncTempleAudio({
+              templeId: selectedTemple?.firestoreId || null,
+              audioUrl: selectedTemple.audioUrl,
+              autoPlay: false,
+            });
+            togglePlayback();
+          }}
+          activeOpacity={0.85}
+          accessibilityLabel={
+            isSelectedTempleAudioActive
+              ? lang === 'te'
+                ? 'ఆడియో పాజ్'
+                : 'Pause audio'
+              : lang === 'te'
+                ? 'ఆడియో ప్లే'
+                : 'Play audio'
+          }
+        >
+          <FontAwesome
+            name={isSelectedTempleAudioActive ? 'pause' : 'play'}
+            size={16}
+            color="#111827"
+          />
+        </TouchableOpacity>
+      ) : null}
       <TouchableOpacity
   onPress={async () => {
     try {
       if (!selectedTemple?.detailsLoaded || !selectedTemple?.extendedDetails?.descriptionHtml) {
-        console.log('📥 Loading extended details before navigation...');
+        devLog('📥 Loading extended details before navigation...');
         
         const templeId = selectedTemple.firestoreId;
         const detailsDoc = await firestore()
@@ -2044,7 +2140,22 @@ return (
           detailsHtml = detailsHtml.substring(1, detailsHtml.length - 1).trim();
         }
 
-        console.log('✅ Loaded HTML length:', detailsHtml.length);
+        devLog('✅ Loaded HTML length:', detailsHtml.length);
+
+        const detailAudio =
+          (await fetchTempleAudioUrlBestEffort(selectedTemple.firestoreId, null, lang)) ||
+          selectedTemple.audioUrl ||
+          null;
+        const shouldAutoPlayInDetails = Boolean(
+          detailAudio &&
+            sharedAudioTrack?.audioUrl === detailAudio &&
+            sharedAudioPlaying
+        );
+        syncTempleAudio({
+          templeId: selectedTemple.firestoreId,
+          audioUrl: detailAudio,
+          autoPlay: shouldAutoPlayInDetails,
+        });
 
         navigation.navigate('TempleDetails', {
           temple: {
@@ -2056,12 +2167,28 @@ return (
             extendedHtml: detailsHtml,
           },
           nearestTemples: nearestTemples,
-          // ✅ ADD THIS: Pass callback to navigate to temple marker only
           onNearestTemplePress: navigateToTempleMarker,
+          audioUrl: detailAudio,
+          autoPlayAudio: shouldAutoPlayInDetails,
         });
       } else {
         const extendedHtml = selectedTemple.extendedDetails.descriptionHtml;
-        console.log('➡️ Navigating with cached HTML length:', extendedHtml.length);
+        devLog('➡️ Navigating with cached HTML length:', extendedHtml.length);
+
+        const detailAudio =
+          (await fetchTempleAudioUrlBestEffort(selectedTemple.firestoreId, null, lang)) ||
+          selectedTemple.audioUrl ||
+          null;
+        const shouldAutoPlayInDetails = Boolean(
+          detailAudio &&
+            sharedAudioTrack?.audioUrl === detailAudio &&
+            sharedAudioPlaying
+        );
+        syncTempleAudio({
+          templeId: selectedTemple.firestoreId,
+          audioUrl: detailAudio,
+          autoPlay: shouldAutoPlayInDetails,
+        });
 
         navigation.navigate('TempleDetails', {
           temple: {
@@ -2073,8 +2200,9 @@ return (
             extendedHtml,
           },
           nearestTemples: nearestTemples,
-          // ✅ ADD THIS: Pass callback
           onNearestTemplePress: navigateToTempleMarker,
+          audioUrl: detailAudio,
+          autoPlayAudio: shouldAutoPlayInDetails,
         });
       }
     } catch (error) {
@@ -2090,6 +2218,14 @@ return (
   </View>
 )}
 
+
+{!showTempleList && !miniCardVisible && (
+  <AppQuickLinks
+    lang={lang}
+    variant="floating"
+    style={{ bottom: selectedTemple ? 120 : 28 }}
+  />
+)}
 
 </View>
 
@@ -2157,6 +2293,9 @@ scrollContent: {
 },
 
 showMoreButtonContainer: {
+  flexDirection: "row",
+  alignItems: "center",
+  columnGap: 10,
   paddingHorizontal: 16,
   paddingTop: 12,
   paddingBottom: 8,  // ✅ Reduced padding
@@ -2164,7 +2303,17 @@ showMoreButtonContainer: {
   borderTopColor: "#E5E7EB",
 },
 
+inlineAudioBtn: {
+  width: 38,
+  height: 38,
+  borderRadius: 19,
+  backgroundColor: '#E8F4FD',
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+
 showMoreBtn: {
+  flex: 1,
   backgroundColor: "#007bff",
   paddingVertical: 10,  // ✅ Reduced padding
   paddingHorizontal: 20,
@@ -2276,9 +2425,10 @@ miniCard: {
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontSize: 13,
+    color: "#111827",
   },
   suggestPopover: {
-    width: "96%",
+    width: "100%",
     marginTop: 6,
     backgroundColor: "#fff",
     borderRadius: 10,
@@ -2286,8 +2436,7 @@ miniCard: {
     borderWidth: 1,
     borderColor: "#eee",
     maxHeight: 240,
-    alignSelf: "center",
-    zIndex: 999,
+    zIndex: 1000,
   },
   suggestItem: {
     paddingHorizontal: 12,
@@ -2298,6 +2447,7 @@ miniCard: {
   suggestTitle: {
     fontSize: 15,
     fontWeight: "600",
+    color: "#111827",
   },
   suggestMeta: { fontSize: 13, color: "#666", marginTop: 2 },
   bottomBar: {
@@ -2555,6 +2705,166 @@ tooltipContent: {
     shadowRadius: 8,
     elevation: 6,
     pointerEvents: 'auto',
+  },
+  filterChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  navIconBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  navIconBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#002244',
+  },
+  logoutIconBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  logoutIconBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#dc2626',
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    flex: 1,
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#002244',
+    flexShrink: 1,
+  },
+  changeFilterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#002244',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  changeFilterText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#e5b765',
+  },
+  browseListBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#002244',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginLeft: 8,
+  },
+  browseListBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#e5b765',
+  },
+  templeListPanel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '62%',
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    elevation: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: -4 },
+    zIndex: 900,
+    paddingBottom: 12,
+  },
+  templeListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  templeListTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#002244',
+  },
+  templeListCount: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  templeListCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  templeListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F9FAFB',
+    gap: 12,
+  },
+  templeListItemRank: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  templeListItemRankText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#002244',
+  },
+  templeListItemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  templeListItemCity: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
   },
 
 

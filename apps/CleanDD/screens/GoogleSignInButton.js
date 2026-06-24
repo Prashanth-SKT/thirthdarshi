@@ -1,11 +1,12 @@
 // components/GoogleSignInButton.js
 import React, { useEffect } from 'react';
+import { devLog } from '../utils/devLog';
 import { TouchableOpacity, Text, Alert, StyleSheet } from 'react-native';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
 const GoogleSignInButton = ({ webClientId, onSignIn, onError, style, textStyle }) => {
   useEffect(() => {
-    console.log('✅ GoogleSignin configured with:', webClientId);
+    devLog('✅ GoogleSignin configured with:', webClientId);
     GoogleSignin.configure({
       webClientId,
       offlineAccess: true,

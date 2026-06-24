@@ -3,6 +3,7 @@ import { View, Image, TouchableOpacity, Text, StyleSheet } from "react-native";
 import { FlatList, Dimensions } from "react-native";
 import { useRef } from "react";
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
+import AppQuickLinks from '../components/AppQuickLinks';
 
 const { width } = Dimensions.get("window");
 
@@ -59,7 +60,7 @@ useEffect(() => {
    
 
   const startApp = () => {
-    navigation.replace("TempleSearch");
+    navigation.replace('TempleFilter');
   };
 // ✅ IN onScroll function, add this
 const onScroll = (event) => {
@@ -77,6 +78,7 @@ const isLastImage = currentIndex === images.length - 1;
 
 
   const startLabel = language === "telugu" ? "ప్రారంభించండి" : "Start";
+  const quickLinksLang = language === "telugu" ? "te" : "en";
 
   return (
    <View style={styles.fill}>
@@ -125,6 +127,7 @@ const isLastImage = currentIndex === images.length - 1;
     <TouchableOpacity onPress={startApp} style={styles.startButton}>
       <Text style={styles.startButtonText}>{startLabel}</Text>
     </TouchableOpacity>
+    <AppQuickLinks lang={quickLinksLang} style={{ marginTop: 12 }} />
   </View>
 )}
 

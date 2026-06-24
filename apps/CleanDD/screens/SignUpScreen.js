@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { devLog } from '../utils/devLog';
 import {
   Text, TextInput, TouchableOpacity, View, Image,
   KeyboardAvoidingView, Platform, StyleSheet, Alert, ScrollView,
@@ -7,11 +8,10 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { useSignupFlow } from '../App';
+import { isAdminEmail } from '../config/adminConfig';
 
 import deity from '../assets/supreme_deity.png';
 import GoogleSignInButton from './GoogleSignInButton';
-
-const ADMIN_EMAIL = 'admin@example.com';
 
 const SignUpScreen = ({ navigation }) => {
   const [name, setName] = useState('');
@@ -37,13 +37,18 @@ const SignUpScreen = ({ navigation }) => {
       return Alert.alert('Terms & Conditions', 'Please accept the Terms & Conditions to continue.');
     }
 
+    if (isAdminEmail(email)) {
+      return Alert.alert(
+        'Web admin only',
+        'This email is for the web admin panel. Sign up here with your personal email, or use the web admin to manage temples.'
+      );
+    }
+
     try {
       setLoad(true);
       
       // ✅ SET FLAG BEFORE CREATING USER (this is the key fix!)
-      if (email.trim().toLowerCase() !== ADMIN_EMAIL) {
-        setShowSuccessScreen(true);
-      }
+      setShowSuccessScreen(true);
 
       const userCredential = await auth().createUserWithEmailAndPassword(
         email.trim(),
@@ -59,7 +64,7 @@ const SignUpScreen = ({ navigation }) => {
           createdAt: firestore.FieldValue.serverTimestamp(),
         });
 
-      console.log('✅ User created:', userCredential.user.uid);
+      devLog('✅ User created:', userCredential.user.uid);
       // Flag is already set - App.js will handle navigation automatically
     } catch (e) {
       console.error('Sign up error:', e);
@@ -88,11 +93,11 @@ const SignUpScreen = ({ navigation }) => {
 
     try {
       await GoogleSignin.signOut();
-      console.log('🔐 Prompting user for account selection...');
+      devLog('🔐 Prompting user for account selection...');
       
       // ✅ CORRECT: userInfo.data contains user details
       const userInfo = await GoogleSignin.signIn();
-      console.log('✅ User selected account');
+      devLog('✅ User selected account');
 
       // ✅ Access email from the correct path
       const userEmail = userInfo.data?.user?.email || userInfo.user?.email;
@@ -101,10 +106,16 @@ const SignUpScreen = ({ navigation }) => {
         throw new Error('Unable to retrieve email from Google account');
       }
 
-      // ✅ SET FLAG BEFORE SIGNIN (check email first)
-      if (userEmail.toLowerCase() !== ADMIN_EMAIL) {
-        setShowSuccessScreen(true);
+      if (isAdminEmail(userEmail)) {
+        await GoogleSignin.signOut();
+        return Alert.alert(
+          'Web admin only',
+          'This Google account cannot be used here. Use the web admin panel for administrator access.'
+        );
       }
+
+      // ✅ SET FLAG BEFORE SIGNIN (check email first)
+      setShowSuccessScreen(true);
 
       const { idToken } = await GoogleSignin.getTokens();
       // ✅ USE NEW MODULAR API
@@ -117,14 +128,14 @@ const SignUpScreen = ({ navigation }) => {
       const isNewUser = !docSnap.exists;
 
       if (isNewUser) {
-        console.log('📦 Storing new user in Firestore...');
+        devLog('📦 Storing new user in Firestore...');
         await userRef.set({
           name: userCredential.user.displayName || 'Google User',
           email: userCredential.user.email,
           createdAt: firestore.FieldValue.serverTimestamp(),
         });
       } else {
-        console.log('🧠 User already exists in Firestore');
+        devLog('🧠 User already exists in Firestore');
       }
 
       // Flag is already set - App.js will handle navigation automatically
@@ -133,7 +144,7 @@ const SignUpScreen = ({ navigation }) => {
       setShowSuccessScreen(false);
       
       if (error.code === 'SIGN_IN_CANCELLED') {
-        console.log('User cancelled the sign-in');
+        devLog('User cancelled the sign-in');
         return;
       }
       

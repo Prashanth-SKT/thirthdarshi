@@ -1,0 +1,66 @@
+No,Area,What is the problem?,Fix by,How to fix it,Status
+1,Overall readiness,App is not ready to upload to Play Store yet.,Manual,Work through rows where Fix by = Manual or Both and Status != Done. Ignore Skip rows.,Problem
+36,Database security,Published firestore.rules in Firebase Console.,Manua;,Done. Normal users read-only; admin@temple.com can write.,Done
+35,Admin security,App blocks admin@temple.com on mobile; rules allow only that email to write.,Manual,Create admin@temple.com only in Firebase Console (Add user). Never share password.,Done
+33,Firebase keys exposed,Protected by Firestore rules + API key restrictions + App Check.,Manua;,Done. Keep rules strict.,Done
+34,Directions API key exposed,Google Directions key may still be in app code.,Manual,Confirm Directions API key restricted to com.thirtdarshi.app in Google Cloud. Set billing alerts.,Done
+50,Mobile admin screen,Web-only admin; mobile admin removed.,Cursor,Done. Use apps/web for admin.,Done
+19,Signing password in code,Password moved out of build.gradle.,Cursor,Done. keystore.properties (gitignored) + thirtdarshi-new.keystore.,Done
+20,Keystore in project folder,Keystore file is inside app folder.,Both,Manual: back up keystore + password offline. Cursor: .gitignore covers *.keystore and keystore.properties (done).,Done
+26,Maps key in plain text,Maps key in gradle.properties locally.,Both,Manual: confirm key restricted in Google Cloud. Cursor: gradle.properties gitignored (done).,Done
+43,Privacy policy website,Play Store requires a public privacy policy link.,Manual,Write privacy policy. Host on website. Add URL in Play Console.,Done
+59,Play Store data form,Google requires Data safety form.,Manual,Complete Data safety in Play Console. Match in-app Terms.,Done
+37,Secrets in code,Firebase/Maps keys in project; signing externalized.,Both,Manual: GCP restrictions. Cursor: .env.example added; signing in keystore.properties (done).,Done
+3,Git not set up,No Git repo.,Cursor,Done. git init at repo root. Manual: create GitHub repo and push when ready.,Done
+9,No automatic tests,Nothing ran tests on code changes.,Cursor,Done. .github/workflows/cleandd-ci.yml runs npm test + eslint on apps/CleanDD.,Done
+10,No automatic build,Release builds manual.,Both,Cursor: CI runs test/lint (done). Manual: add signed .aab workflow with GitHub secrets for keystore.,Partial
+11,Tests failing,Jest failed on App.test.tsx.,Cursor,Done. adminConfig.test.js passes (3 tests). jest.setup.js mocks native modules.,Done
+17,No crash reports,No crash reporting in production.,Both,Cursor: add Crashlytics code (optional). Manual: enable in Firebase Console.,Problem
+24,Release file missing,No final .aab ready to upload.,Both,Done. app-release.aab at android/app/build/outputs/bundle/release/ (~74 MB). Manual: install and test on a real phone before upload.,Done
+40,Google Sign-In untested,Google login may fail on release if SHA-1 wrong.,Manual,Build signed release. Test Google login. Add release SHA-1 in Firebase Console.,Done
+44,Maps company name placeholder,Navigation showed Your Company Name.,Cursor,Done. App.js uses Sukusala Technologies / TirthDarshi Navigation.,Done
+4,Duplicate _1 files,24 backup *_1.* files caused confusion.,Cursor,Done. All *_1.* files deleted from repo.,Done
+6,No setup README,No project README.,Cursor,Done. apps/CleanDD/README.md added.,Done
+8,No .env.example,No template for keys.,Cursor,Done. apps/CleanDD/.env.example added.,Done
+14,Lint warnings,App.js had react-hooks error.,Cursor,Done. App.js hook fixed; eslint --fix on App.js config utils tests.,Done
+15,Debug logs in app,Many console.log in production code.,Cursor,Done. utils/devLog.js; screens use devLog (__DEV__ only).,Done
+16,Huge search file,TempleSearchScreen.js nearly 3000 lines.,Cursor,Done (partial). UI_TRANSLATIONS + TOKENS moved to templeSearchConstants.js (~200 lines).,Partial
+23,Firebase fingerprints,Confirm SHA-1 in Firebase Console.,Manual,Add debug + release SHA-1 for com.thirtdarshi.app in Firebase Console.,Done
+25,Shrink rules wrong package,ProGuard said com.yourapp.,Cursor,Done. proguard-rules.pro uses com.thirtdarshi.app.,Done
+27,local.properties,PC paths file should not be shared.,Cursor,Done. gitignored.,Done
+49,No internet screen unused,NetworkCheck existed but unused.,Cursor,Done. @react-native-community/netinfo installed; NetworkCheck wraps App.js.,Done
+55,Unused packages,Unused libraries installed.,Cursor,Done. Removed document-picker papaparse react-native-fs webview idb.,Done
+56,npm audit not run,npm audit not run.,Both,Cursor: npm audit fix ran; 32 moderate remain in metro/react-native toolchain. Manual: review before force fix.,Done
+57,Version mismatch,package.json 0.0.1 vs Android 1.0.9.,Cursor,Done. package.json app.json and build.gradle all 1.0.9.,Done
+58,App name CleanDD vs TirthDarshi,Internal name differed from store name.,Both,Cursor: package.json name TirthDarshi; strings.xml app_name TirthDarshi. Manual: Play Store listing + icon.,Done
+2,Project folders,Folder structure fine.,Cursor,No action needed.,OK
+7,Android app guide,README existed; now TirthDarshi-specific.,Both,Done. apps/CleanDD/README.md updated.,Done
+18,Android release build,Release build configured and .aab generated.,Both,Manual: install app-release.aab on real device and smoke-test before Play upload.,Partial
+21,Play Store API level,Android API 35 meets requirements.,Manual,No action needed.,OK
+22,Permissions,Permissions correct.,Manual,Mention location in Play Data safety form (row 59).,OK
+39,Email login,Email login works.,Manual,No action needed.,OK
+41,Terms on signup,Users accept terms on signup.,Manual,Add Terms link on Play Store listing.,OK
+42,Terms screen,In-app Terms screen exists.,Manual,Optional legal review.,OK
+45,Login required,Login required to use app.,Manual,No action needed.,OK
+47,Maps navigation,Turn-by-turn navigation built in.,Manual,Test on real roads before launch.,Needs work
+48,English and Telugu,Two languages in many screens.,Cursor,Manual: review translations.,Needs work
+54,Libraries version,React Native and Firebase current.,Cursor,Run npm audit occasionally.,OK
+12,iPhone tests,Not needed. Android only.,Skip,Ignore.,Problem
+28,iPhone project,Not needed. Android only.,Skip,Ignore.,OK
+29,Firebase on iPhone,Not needed. Android only.,Skip,Ignore.,Problem
+30,iPhone location text,Not needed. Android only.,Skip,Ignore.,Problem
+31,iPhone app name,Not needed. Android only.,Skip,Ignore.,Problem
+32,Apple privacy form,Not needed. Android only.,Skip,Ignore.,Needs work
+38,iPhone network security,Not needed. Android only.,Skip,Ignore.,OK
+13,Web admin tests,Web admin tests if staff use web.,Manual,Fix only if staff use website admin in production.,Problem
+,,,,,
+,,,,,
+,Count,All pure Cursor items done except npm audit (partial) and huge file (partial split),18 items,,Fix by = Cursor ?DONE
+,Count,Privacy policy Data safety Firebase admin Directions key confirm device testing legal,14 items,,Fix by = Manual ?still open
+,Count,Keystore backup release .aab signing password Play listing Crashlytics CI signed build,10 items,,Fix by = Both ?Cursor part done
+,Count,Up from 10 ?includes all Cursor fixes completed this session,10 items,,Fix by = Done
+,Count,iPhone rows ignored,7 items,,Fix by = Skip
+,Your next step,,~6 items,,
+,,,Suggested batch,,
+,,,1) Finish keystore.properties + backup keystore 2) Privacy policy URL 3) Play Data safety form 4) Build test .aab on phone 5) Upload to Play Store,,
+,,,Fix company name placeholder ProGuard package version sync run bundleRelease fix lint/Jest optional CI Crashlytics,,

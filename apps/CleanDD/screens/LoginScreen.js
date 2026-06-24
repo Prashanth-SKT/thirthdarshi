@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { devLog } from '../utils/devLog';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -15,13 +16,12 @@ import auth from '@react-native-firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 import loginImage from '../assets/vishnu_deities.png';
+import { isAdminEmail } from '../config/adminConfig';
 
 // Configure Google Signin
 GoogleSignin.configure({
   webClientId: '504773176335-3qgua7sjaohgnvhjlu65e3la631skck5.apps.googleusercontent.com',
 });
-
-const ADMIN_EMAIL = 'admin@temple.com';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -43,6 +43,14 @@ const LoginScreen = ({ navigation }) => {
       Alert.alert('Validation Error', 'Password must be at least 6 characters.');
       return;
     }
+
+    if (isAdminEmail(email)) {
+      Alert.alert(
+        'Web admin only',
+        'Administrator access is on the web admin panel, not this mobile app. Use a regular user account to log in here.'
+      );
+      return;
+    }
     
     try {
       setLoading(true);
@@ -51,7 +59,7 @@ const LoginScreen = ({ navigation }) => {
       await auth().signInWithEmailAndPassword(email.trim(), password);
       
       // ✅ No manual navigation - App.js will automatically navigate based on auth state
-      console.log('✅ Login successful');
+      devLog('✅ Login successful');
     } catch (e) {
       let msg = 'Login failed. Please try again.';
       if (e?.code === 'auth/user-not-found') {
@@ -79,6 +87,17 @@ const LoginScreen = ({ navigation }) => {
       
       // ✅ Get user info
       const userInfo = await GoogleSignin.signIn();
+      const userEmail = userInfo.data?.user?.email || userInfo.user?.email;
+
+      if (isAdminEmail(userEmail)) {
+        await GoogleSignin.signOut();
+        Alert.alert(
+          'Web admin only',
+          'Administrator access is on the web admin panel, not this mobile app.'
+        );
+        return;
+      }
+
       const { idToken } = await GoogleSignin.getTokens();
       
       // ✅ USE NEW MODULAR API (no deprecation warning)
@@ -88,10 +107,10 @@ const LoginScreen = ({ navigation }) => {
       await auth().signInWithCredential(googleCredential);
       
       // ✅ No manual navigation - App.js will automatically navigate based on auth state
-      console.log('✅ Google sign-in successful');
+      devLog('✅ Google sign-in successful');
     } catch (error) {
       if (error.code === 'SIGN_IN_CANCELLED') {
-        console.log('User cancelled the sign-in');
+        devLog('User cancelled the sign-in');
         return;
       }
       console.error('Google Sign-In error:', error);

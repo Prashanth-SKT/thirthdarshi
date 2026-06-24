@@ -1,0 +1,57 @@
+OLD:
+  container: {
+    flex: 1,
+    backgroundColor: '#e5b765',
+    paddingHorizontal: 24,
+    paddingTop: 60,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+
+NEW:
+  container: {
+    flex: 1,
+    backgroundColor: '#e5b765',
+    paddingHorizontal: 24,
+    paddingTop: 52,
+  },
+  navRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  navBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: '#FAEED1',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: '#002244',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  navBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#002244',
+  },
+  logoutBtn: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#dc2626',
+  },
+  logoutBtnText: {
+    color: '#dc2626',
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },

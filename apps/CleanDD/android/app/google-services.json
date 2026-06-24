@@ -81,6 +81,67 @@
     },
     {
       "client_info": {
+        "mobilesdk_app_id": "1:504773176335:android:3302b718c33e80d951877a",
+        "android_client_info": {
+          "package_name": "com.thirtdarshi.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "504773176335-13vfo8hu03omhmbitj7ihnp5usubsuh7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.thirtdarshi.app",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "504773176335-19u6v36r9o7ff2iv5p0d40ugrfru8erd.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.thirtdarshi.app",
+            "certificate_hash": "73b302837b65c15fc9351d9266ca04597d6fbaf8"
+          }
+        },
+        {
+          "client_id": "504773176335-1gqdvfntbrk3628lc4ofj35lc8ds05np.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.thirtdarshi.app",
+            "certificate_hash": "0b49e9bcfa6473ab07de1130f1592d9d3c952e51"
+          }
+        },
+        {
+          "client_id": "504773176335-v8qhi72oqkcsd9ilsjet2qf2ua9dteh6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.thirtdarshi.app",
+            "certificate_hash": "9298ff88384f7e0c77258e550ddfd973bb24f873"
+          }
+        },
+        {
+          "client_id": "504773176335-3qgua7sjaohgnvhjlu65e3la631skck5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5OcFEXAJ_Fd6h1DVlxZ5Yfw0mcCbn5dE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "504773176335-05sjfenb5arce92m2ajn0on4ocmepv10.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:504773176335:android:117bb18e8389452151877a",
         "android_client_info": {
           "package_name": "com.x0xfair.x108DD"

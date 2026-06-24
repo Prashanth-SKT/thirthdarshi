@@ -1,0 +1,29 @@
+OLD:
+import React, { useContext, useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
+import { Dropdown } from 'react-native-element-dropdown';
+import FontAwesome from 'react-native-vector-icons/FontAwesome';
+import { fetchTemples } from '../../CleanDD/packages/api-client/firestoreClient';
+import { LanguageContext } from './LanguageContext';
+
+NEW:
+import React, { useContext, useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import { Dropdown } from 'react-native-element-dropdown';
+import FontAwesome from 'react-native-vector-icons/FontAwesome';
+import { fetchTemples } from '../../CleanDD/packages/api-client/firestoreClient';
+import { LanguageContext } from './LanguageContext';
+import auth from '@react-native-firebase/auth';

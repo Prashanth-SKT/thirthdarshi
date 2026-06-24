@@ -13,11 +13,9 @@ const config = {
       },
     }),
   },
-  // ✅ FIX: Disable watchman on Windows (use polling instead)
   watchman: false,
   resolver: {
     sourceExts: ['jsx', 'js', 'ts', 'tsx', 'json'],
-    // ✅ Ignore problematic Firebase build directories
     blacklistRE: /node_modules\/.*\/build\/.*/,
   },
 };

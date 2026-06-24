@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { devLog } from '../utils/devLog';
 import { 
   View, 
   ScrollView, 
@@ -13,20 +14,31 @@ import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import RenderHTML from 'react-native-render-html';
 import LanguageText from './LanguageText';
 import { LanguageContext } from './LanguageContext';
+import { useTempleAudio } from './TempleAudioContext';
 
 const { width: windowWidth } = Dimensions.get('window');
 
 const TempleDetailsScreen = ({ navigation }) => {
   const route = useRoute();
-  const { temple, nearestTemples } = route.params; // ✅ Add nearestTemples from params
+  const { temple, nearestTemples, audioUrl: paramAudioUrl, autoPlayAudio } = route.params || {};
   const { lang } = React.useContext(LanguageContext);
+  const { track, isPlaying, syncTempleAudio, togglePlayback } = useTempleAudio();
+
+  const audioUrl =
+    (typeof paramAudioUrl === 'string' && paramAudioUrl.trim() ? paramAudioUrl.trim() : null) ||
+    (typeof temple?.audioUrl === 'string' && temple.audioUrl.trim() ? temple.audioUrl.trim() : null);
+
+  const hasNearby = Boolean(nearestTemples && nearestTemples.length > 0);
+  const isCurrentTempleAudioActive = Boolean(
+    audioUrl && track?.audioUrl === audioUrl && isPlaying
+  );
   
   // ✅ State for nearby temples dropdown
   const [showNearbyDropdown, setShowNearbyDropdown] = useState(false);
   const [showHintText, setShowHintText] = useState(true);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  console.log('🔍 TempleDetailsScreen received:', {
+  devLog('🔍 TempleDetailsScreen received:', {
     temple: temple?.name,
     nearestTemplesCount: nearestTemples?.length || 0
   });
@@ -55,6 +67,15 @@ const TempleDetailsScreen = ({ navigation }) => {
       return () => clearTimeout(timer);
     }
   }, [nearestTemples]);
+
+  useEffect(() => {
+    if (!audioUrl) return;
+    syncTempleAudio({
+      templeId: temple?.firestoreId || null,
+      audioUrl,
+      autoPlay: Boolean(autoPlayAudio),
+    });
+  }, [audioUrl, autoPlayAudio, temple?.firestoreId, syncTempleAudio]);
 
   // ✅ Extract and clean the HTML
   let htmlContent = temple?.extendedHtml || '';
@@ -173,6 +194,36 @@ const TempleDetailsScreen = ({ navigation }) => {
       >
         <FontAwesome name="chevron-left" size={20} color="#111827" />
       </TouchableOpacity>
+
+      {audioUrl ? (
+        <TouchableOpacity
+          style={[styles.audioButton, hasNearby && styles.audioButtonWithNearby]}
+          onPress={() => {
+            syncTempleAudio({
+              templeId: temple?.firestoreId || null,
+              audioUrl,
+              autoPlay: false,
+            });
+            togglePlayback();
+          }}
+          activeOpacity={0.85}
+          accessibilityLabel={
+            isCurrentTempleAudioActive
+              ? lang === 'te'
+                ? 'ఆడియో పాజ్'
+                : 'Pause audio'
+              : lang === 'te'
+                ? 'ఆడియో ప్లే'
+                : 'Play audio'
+          }
+        >
+          <FontAwesome
+            name={isCurrentTempleAudioActive ? 'pause' : 'play'}
+            size={18}
+            color="#111827"
+          />
+        </TouchableOpacity>
+      ) : null}
 
       {/* ✅ Floating Nearby Temples Icon (top right) */}
       {nearestTemples && nearestTemples.length > 0 && (
@@ -335,6 +386,26 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
+  },
+  audioButton: {
+    position: 'absolute',
+    top: 50,
+    right: 16,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E8F4FD',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  audioButtonWithNearby: {
+    right: 72,
   },
   // ✅ Nearby temples icon styles
   nearbyIconContainer: {

@@ -12,10 +12,17 @@ apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
 
 react {
     autolinkLibrariesWithApp()
+    nodeExecutableAndArgs.set(["node", "--max-old-space-size=3072"])
 }
 
 def enableProguardInReleaseBuilds = false
 def jscFlavor = 'org.webkit:android-jsc:+'
+
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
 
 android {
     ndkVersion rootProject.ext.ndkVersion
@@ -32,15 +39,16 @@ android {
         jvmTarget = "17"
     }
 
-    namespace "com.cleandd"
+    namespace "com.thirtdarshi.app"
     defaultConfig {
-        applicationId "com.x0xfair.x108DD"
+        applicationId "com.thirtdarshi.app"
 
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 4
+        versionCode 10
         multiDexEnabled true
-        versionName "1.0.3"
+        versionName "1.0.9"
+        resConfigs "en"
         
         // ✅ Read Maps API Key from gradle.properties
         def mapsApiKey = project.hasProperty("MAPS_API_KEY") ? project.property("MAPS_API_KEY") : ""
@@ -58,22 +66,11 @@ android {
         }
         
         release {
-            // ✅ Check if keystore file exists
-            if (project.hasProperty('KEYSTORE_PASSWORD') && 
-                project.hasProperty('KEY_PASSWORD') && 
-                project.hasProperty('KEY_ALIAS')) {
-                
-                def keystoreFile = file('./my-upload-key.keystore')
-                if (keystoreFile.exists()) {
-                    storeFile keystoreFile
-                    storePassword project.property('KEYSTORE_PASSWORD')
-                    keyPassword project.property('KEY_PASSWORD')
-                    keyAlias project.property('KEY_ALIAS')
-                } else {
-                    throw new GradleException("❌ Keystore file not found at: ${keystoreFile.absolutePath}")
-                }
-            } else {
-                throw new GradleException("❌ Missing signing config properties. Please check gradle.properties has: KEYSTORE_PASSWORD, KEY_PASSWORD, KEY_ALIAS")
+            if (keystorePropertiesFile.exists()) {
+                storeFile rootProject.file(keystoreProperties['storeFile'].trim())
+                storePassword keystoreProperties['storePassword'].trim()
+                keyAlias keystoreProperties['keyAlias'].trim()
+                keyPassword keystoreProperties['keyPassword'].trim()
             }
         }
     }
@@ -83,7 +80,9 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            signingConfig signingConfigs.release
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
             shrinkResources true
             minifyEnabled true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
@@ -114,11 +113,11 @@ dependencies {
     
     implementation project(':react-native-maps')
 
-    if (hermesEnabled.toBoolean()) {
-        implementation("com.facebook.react:hermes-android")
-    } else {
-        implementation jscFlavor
-    }
+    if (project.ext.react.get("enableHermes", false)) {
+    implementation("com.facebook.react:hermes-android")
+} else {
+    implementation jscFlavor
+}
 }
 
 apply plugin: 'com.google.gms.google-services'

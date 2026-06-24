@@ -1,4 +1,5 @@
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { devLog } from '../utils/devLog';
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   NavigationView,
@@ -6,12 +7,15 @@ import {
   RouteStatus,
   useNavigation,
 } from "@googlemaps/react-native-navigation-sdk";
+import FontAwesome from "react-native-vector-icons/FontAwesome";
+import { useTempleAudio } from "./TempleAudioContext";
 
 /**
  * For more into u can check https://github.com/googlemaps/react-native-navigation-sdk/tree/main/example
  */
 const NavigationScreen = ({ navigation, route }) => {
-  const { coords, name } = route.params;
+  const { coords, name, audioUrl, autoPlayAudio } = route.params || {};
+  const { track, isPlaying, syncTempleAudio, togglePlayback } = useTempleAudio();
   const [mapViewController, setMapViewController] = useState(null);
   const [navigationViewController, setNavigationViewController] =
     useState(null);
@@ -19,13 +23,26 @@ const NavigationScreen = ({ navigation, route }) => {
   const { navigationController, addListeners, removeListeners } =
     useNavigation();
   const onMapReady = useCallback(async () => {
-    console.log("Map is ready, initializing navigator...");
+    devLog("Map is ready, initializing navigator...");
     try {
       await navigationController.init();
     } catch (error) {
       console.error("Error initializing navigator", error);
     }
   }, [navigationController]);
+
+  useEffect(() => {
+    if (!audioUrl) return;
+    syncTempleAudio({
+      templeId: route?.params?.templeId || null,
+      audioUrl,
+      autoPlay: Boolean(autoPlayAudio),
+    });
+  }, [audioUrl, autoPlayAudio, route?.params?.templeId, syncTempleAudio]);
+
+  const isCurrentTempleAudioActive = Boolean(
+    audioUrl && track?.audioUrl === audioUrl && isPlaying
+  );
 
   // single destination:
   const initWaypoint = async () => {
@@ -64,11 +81,11 @@ const NavigationScreen = ({ navigation, route }) => {
   const onArrival = useCallback(
     (event) => {
       if (event.isFinalDestination) {
-        console.log("Final destination reached");
+        devLog("Final destination reached");
         navigationController.stopGuidance();
         navigation.navigate("TempleSearch");
       } else {
-        console.log("Continuing to the next destination");
+        devLog("Continuing to the next destination");
         navigationController.continueToNextDestination();
         navigationController.startGuidance();
       }
@@ -84,7 +101,7 @@ const NavigationScreen = ({ navigation, route }) => {
   }, [mapViewController, onMapReady]);
 
   const onRecenterButtonClick = useCallback(() => {
-    console.log("onRecenterButtonClick");
+    devLog("onRecenterButtonClick");
   }, []);
 
   const navigationViewCallbacks = {
@@ -92,7 +109,7 @@ const NavigationScreen = ({ navigation, route }) => {
   };
 
   const onNavigationReady = useCallback(() => {
-    console.log("onNavigationReady");
+    devLog("onNavigationReady");
     setNavigationInitialized(true);
     initWaypoint();
   }, []);
@@ -197,6 +214,28 @@ const NavigationScreen = ({ navigation, route }) => {
           <Text style={styles.loadingText}>Initializing Navigation...</Text>
         </View>
       )}
+
+      {audioUrl ? (
+        <TouchableOpacity
+          style={styles.audioButton}
+          onPress={() => {
+            syncTempleAudio({
+              templeId: route?.params?.templeId || null,
+              audioUrl,
+              autoPlay: false,
+            });
+            togglePlayback();
+          }}
+          activeOpacity={0.85}
+          accessibilityLabel={isCurrentTempleAudioActive ? "Pause audio" : "Play audio"}
+        >
+          <FontAwesome
+            name={isCurrentTempleAudioActive ? "pause" : "play"}
+            size={18}
+            color="#111827"
+          />
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 };
@@ -228,5 +267,22 @@ const styles = StyleSheet.create({
   loadingText: {
     color: "white",
     fontSize: 16,
+  },
+  audioButton: {
+    position: "absolute",
+    top: 50,
+    right: 16,
+    zIndex: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#E8F4FD",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 5,
   },
 });

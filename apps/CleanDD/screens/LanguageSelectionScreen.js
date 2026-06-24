@@ -1,8 +1,10 @@
 import { StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
+import { devLog } from '../utils/devLog';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import skyline from '../assets/skyline.png'; // adjust path if needed
 import { useContext } from 'react';
 import { LanguageContext } from './LanguageContext'; // your context
+import AppQuickLinks from '../components/AppQuickLinks';
 
 const languages = [
   { label: 'తెలుగు', code: 'te' },
@@ -10,11 +12,11 @@ const languages = [
 ];
 
 const LanguageSelectionScreen = ({ navigation }) => {
-  const { setLanguage } = useContext(LanguageContext); // ✅ this fixes the error
+  const { lang, setLanguage } = useContext(LanguageContext);
  const languageMap = { 'te': 'telugu', 'en': 'english' };
   const handleLanguageSelect = async (code) => {
     try {
-      console.log('Selected language:', code);
+      devLog('Selected language:', code);
       await AsyncStorage.setItem('selectedLanguage', code);
       setLanguage(code);
      setTimeout(() => navigation.replace('Onboarding', { language: languageMap[code] })
@@ -49,6 +51,7 @@ const LanguageSelectionScreen = ({ navigation }) => {
             </TouchableOpacity>
           ))}
         </View>
+        <AppQuickLinks lang={lang || 'en'} />
       </View>
     </View>
   );

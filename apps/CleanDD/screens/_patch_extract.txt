@@ -1,0 +1,438 @@
+=== PATCH LINE 14 ===
+*** Begin Patch
+*** Update File: E:\thirthdarshi-main\thirthdarshi-main\apps\CleanDD\screens\OnboardingScreen.js
+@@
+-import React from 'react';
+-import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
++import React, { useEffect, useMemo, useState } from 'react';
++import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
++import AsyncStorage from '@react-native-async-storage/async-storage';
++import auth from '@react-native-firebase/auth';
++import Video from 'react-native-video';
+ 
+ const OnboardingScreen = ({ navigation, route }) => {
+-  const { language } = route.params;
++  const routeLanguage = route?.params?.language;
++  const language = routeLanguage === 'telugu' ? 'telugu' : 'english';
++  const [isVideoReady, setIsVideoReady] = useState(false);
++  const [showVideo, setShowVideo] = useState(false);
++  const [isPlaying, setIsPlaying] = useState(false);
++
++  const videoSource = useMemo(() => {
++    // NOTE: switch English source to DD_english.mp4 once the file is added to assets.
++    if (language === 'telugu') {
++      return require('../assets/DD_telugu.mp4');
++    }
++    return require('../assets/DD_telugu.mp4');
++  }, [language]);
++
++  useEffect(() => {
++    const bootstrapVideo = async () => {
++      try {
++        const uid = auth().currentUser?.uid || 'guest';
++        const key = `onboardingVideoSeen:${uid}:${language}`;
++        const seen = await AsyncStorage.getItem(key);
++        const firstTimeForLanguage = !seen;
++
++        if (firstTimeForLanguage) {
++          setShowVideo(true);
++          setIsPlaying(true);
++          await AsyncStorage.setItem(key, 'true');
++        }
++      } catch (error) {
++        console.error('Failed to load onboarding video state:', error);
++      } finally {
++        setIsVideoReady(true);
++      }
++    };
++
++    bootstrapVideo();
++  }, [language]);
+@@
+   const goToInstructions = () => {
+     navigation.navigate('Instruction', { language });
+   };
++
++  const playVideo = () => {
++    setShowVideo(true);
++    setIsPlaying(true);
++  };
+ 
+   // Conditional button labels based on selected language
+   const startLabel = language === 'telugu' ? "ప్రారంభించండి" : "Start";
+   const instructionsLabel = language === 'telugu' ? "సూచనలు చూడండి" : "See Instructions";
+   const welcomeText = language === 'telugu' ? "స్వాగతం!" : "Welcome!";
++  const playVideoLabel = language === 'telugu' ? 'వీడియో చూడండి' : 'Play Video';
++  const closeVideoLabel = language === 'telugu' ? 'మూసివేయండి' : 'Close Video';
+ 
+   return (
+     <View style={styles.fill}>
+@@
+       <View style={styles.buttonContainer}>
++        {isVideoReady && !showVideo ? (
++          <TouchableOpacity
++            style={[styles.button, styles.videoButton]}
++            onPress={playVideo}
++          >
++            <Text style={styles.buttonText}>{playVideoLabel}</Text>
++          </TouchableOpacity>
++        ) : null}
++
++        {showVideo ? (
++          <View style={styles.videoContainer}>
++            <Video
++              source={videoSource}
++              style={styles.videoPlayer}
++              controls
++              resizeMode="contain"
++              paused={!isPlaying}
++              onEnd={() => setIsPlaying(false)}
++              onError={(error) => console.error('Video playback error:', error)}
++            />
++            <TouchableOpacity
++              style={[styles.button, styles.closeVideoButton]}
++              onPress={() => {
++                setIsPlaying(false);
++                setShowVideo(false);
++              }}
++            >
++              <Text style={styles.buttonText}>{closeVideoLabel}</Text>
++            </TouchableOpacity>
++          </View>
++        ) : null}
++
+         <TouchableOpacity
+           style={[styles.button, styles.startButton]}
+           onPress={goToTempleSearch}
+@@
+   button: {
+@@
+   startButton: {},
+   instructionButton: {},
++  videoButton: {
++    backgroundColor: '#fff7e5',
++  },
++  closeVideoButton: {
++    marginTop: 10,
++    paddingVertical: 12,
++  },
++  videoContainer: {
++    width: '100%',
++    alignItems: 'center',
++    marginBottom: 8,
++  },
++  videoPlayer: {
++    width: '100%',
++    height: 220,
++    backgroundColor: '#000',
++    borderRadius: 12,
++  },
+   buttonText: {
+*** End Patch
+
+
+=== PATCH LINE 22 ===
+*** Begin Patch
+*** Update File: E:\thirthdarshi-main\thirthdarshi-main\apps\CleanDD\screens\OnboardingScreen.js
+@@
+ import React, { useEffect, useMemo, useState } from 'react';
+-import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
++import { View, TouchableOpacity, Text, StyleSheet, Modal } from 'react-native';
+@@
+   const routeLanguage = route?.params?.language;
+   const language = routeLanguage === 'telugu' ? 'telugu' : 'english';
+-  const [isVideoReady, setIsVideoReady] = useState(false);
+-  const [showVideo, setShowVideo] = useState(false);
++  const [showVideoModal, setShowVideoModal] = useState(false);
+   const [isPlaying, setIsPlaying] = useState(false);
+@@
+         if (firstTimeForLanguage) {
+-          setShowVideo(true);
++          setShowVideoModal(true);
+           setIsPlaying(true);
+           await AsyncStorage.setItem(key, 'true');
+         }
+       } catch (error) {
+         console.error('Failed to load onboarding video state:', error);
+-      } finally {
+-        setIsVideoReady(true);
+       }
+     };
+@@
+   const playVideo = () => {
+-    setShowVideo(true);
++    setShowVideoModal(true);
+     setIsPlaying(true);
+   };
+@@
+-  const playVideoLabel = language === 'telugu' ? 'వీడియో చూడండి' : 'Play Video';
+   const closeVideoLabel = language === 'telugu' ? 'మూసివేయండి' : 'Close Video';
+ 
+   return (
+     <View style={styles.fill}>
+       <View style={styles.top}>
++        <TouchableOpacity style={styles.videoIconButton} onPress={playVideo}>
++          <Text style={styles.videoIcon}>▶</Text>
++        </TouchableOpacity>
+         <Text style={styles.title}>{welcomeText}</Text>
+       </View>
+       <View style={styles.buttonContainer}>
+-        {isVideoReady && !showVideo ? (
+-          <TouchableOpacity
+-            style={[styles.button, styles.videoButton]}
+-            onPress={playVideo}
+-          >
+-            <Text style={styles.buttonText}>{playVideoLabel}</Text>
+-          </TouchableOpacity>
+-        ) : null}
+-
+-        {showVideo ? (
+-          <View style={styles.videoContainer}>
++        <Modal
++          visible={showVideoModal}
++          animationType="fade"
++          onRequestClose={() => {
++            setIsPlaying(false);
++            setShowVideoModal(false);
++          }}
++        >
++          <View style={styles.fullscreenContainer}>
+             <Video
+               source={videoSource}
+-              style={styles.videoPlayer}
++              style={styles.fullscreenVideo}
+               controls
+-              resizeMode="contain"
++              resizeMode="cover"
+               paused={!isPlaying}
+-              onEnd={() => setIsPlaying(false)}
++              fullscreen
++              onEnd={() => {
++                setIsPlaying(false);
++                setShowVideoModal(false);
++              }}
+               onError={(error) => console.error('Video playback error:', error)}
+             />
+             <TouchableOpacity
+-              style={[styles.button, styles.closeVideoButton]}
++              style={styles.closeVideoButton}
+               onPress={() => {
+                 setIsPlaying(false);
+-                setShowVideo(false);
++                setShowVideoModal(false);
+               }}
+             >
+-              <Text style={styles.buttonText}>{closeVideoLabel}</Text>
++              <Text style={styles.closeVideoText}>{closeVideoLabel}</Text>
+             </TouchableOpacity>
+           </View>
+-        ) : null}
++        </Modal>
+ 
+         <TouchableOpacity
+           style={[styles.button, styles.startButton]}
+@@
+   top: {
+     alignItems: 'center',
+     marginBottom: 40,
++    width: '80%',
+   },
++  videoIconButton: {
++    alignSelf: 'flex-end',
++    backgroundColor: '#FAEED1',
++    width: 46,
++    height: 46,
++    borderRadius: 23,
++    alignItems: 'center',
++    justifyContent: 'center',
++    marginBottom: 14,
++    borderWidth: 1.5,
++    borderColor: '#002244',
++  },
++  videoIcon: {
++    fontSize: 20,
++    color: '#002244',
++    marginLeft: 2,
++    fontWeight: '700',
++  },
+@@
+   instructionButton: {},
+-  videoButton: {
+-    backgroundColor: '#fff7e5',
+-  },
++  fullscreenContainer: {
++    flex: 1,
++    backgroundColor: '#000',
++    justifyContent: 'center',
++  },
++  fullscreenVideo: {
++    width: '100%',
++    height: '100%',
++  },
+   closeVideoButton: {
+-    marginTop: 10,
+-    paddingVertical: 12,
+-  },
+-  videoContainer: {
+-    width: '100%',
+-    alignItems: 'center',
+-    marginBottom: 8,
+-  },
+-  videoPlayer: {
+-    width: '100%',
+-    height: 220,
+-    backgroundColor: '#000',
+-    borderRadius: 12,
++    position: 'absolute',
++    top: 50,
++    right: 18,
++    backgroundColor: 'rgba(0,0,0,0.6)',
++    paddingHorizontal: 12,
++    paddingVertical: 8,
++    borderRadius: 8,
++  },
++  closeVideoText: {
++    color: '#fff',
++    fontWeight: '700',
+   },
+*** End Patch
+
+
+=== PATCH LINE 28 ===
+*** Begin Patch
+*** Update File: E:\thirthdarshi-main\thirthdarshi-main\apps\CleanDD\screens\OnboardingScreen.js
+@@
+ import React, { useEffect, useMemo, useState } from 'react';
+ import { View, TouchableOpacity, Text, StyleSheet, Modal } from 'react-native';
+@@
+   return (
+     <View style={styles.fill}>
++      <TouchableOpacity style={styles.videoIconButton} onPress={playVideo}>
++        <Text style={styles.videoIcon}>▶</Text>
++      </TouchableOpacity>
++
+       <View style={styles.top}>
+-        <TouchableOpacity style={styles.videoIconButton} onPress={playVideo}>
+-          <Text style={styles.videoIcon}>▶</Text>
+-        </TouchableOpacity>
+         <Text style={styles.title}>{welcomeText}</Text>
+       </View>
+       <View style={styles.buttonContainer}>
+-        <Modal
+-          visible={showVideoModal}
+-          animationType="fade"
+-          onRequestClose={() => {
+-            setIsPlaying(false);
+-            setShowVideoModal(false);
+-          }}
+-        >
+-          <View style={styles.fullscreenContainer}>
+-            <Video
+-              source={videoSource}
+-              style={styles.fullscreenVideo}
+-              controls
+-              resizeMode="cover"
+-              paused={!isPlaying}
+-              fullscreen
+-              onEnd={() => {
+-                setIsPlaying(false);
+-                setShowVideoModal(false);
+-              }}
+-              onError={(error) => console.error('Video playback error:', error)}
+-            />
+-            <TouchableOpacity
+-              style={styles.closeVideoButton}
+-              onPress={() => {
+-                setIsPlaying(false);
+-                setShowVideoModal(false);
+-              }}
+-            >
+-              <Text style={styles.closeVideoText}>{closeVideoLabel}</Text>
+-            </TouchableOpacity>
+-          </View>
+-        </Modal>
+-
+         <TouchableOpacity
+           style={[styles.button, styles.startButton]}
+           onPress={goToTempleSearch}
+@@
+         </TouchableOpacity>
+       </View>
++
++      <Modal
++        visible={showVideoModal}
++        animationType="fade"
++        presentationStyle="fullScreen"
++        statusBarTranslucent
++        onRequestClose={() => {
++          setIsPlaying(false);
++          setShowVideoModal(false);
++        }}
++      >
++        <View style={styles.fullscreenContainer}>
++          <Video
++            source={videoSource}
++            style={styles.fullscreenVideo}
++            controls
++            resizeMode="contain"
++            paused={!isPlaying}
++            onEnd={() => {
++              setIsPlaying(false);
++              setShowVideoModal(false);
++            }}
++            onError={(error) => console.error('Video playback error:', error)}
++          />
++          <TouchableOpacity
++            style={styles.closeVideoButton}
++            onPress={() => {
++              setIsPlaying(false);
++              setShowVideoModal(false);
++            }}
++          >
++            <Text style={styles.closeVideoText}>{closeVideoLabel}</Text>
++          </TouchableOpacity>
++        </View>
++      </Modal>
+     </View>
+   );
+ };
+@@
+   fill: {
+     flex: 1,
+     backgroundColor: '#e5b765', // light sand background
+     alignItems: 'center',
+     justifyContent: 'center',
+   },
++  videoIconButton: {
++    position: 'absolute',
++    top: 16,
++    right: 16,
++    backgroundColor: '#FAEED1',
++    width: 46,
++    height: 46,
++    borderRadius: 23,
++    alignItems: 'center',
++    justifyContent: 'center',
++    borderWidth: 1.5,
++    borderColor: '#002244',
++    zIndex: 10,
++  },
+   top: {
+     alignItems: 'center',
+     marginBottom: 40,
+     width: '80%',
+   },
+-  videoIconButton: {
+-    alignSelf: 'flex-end',
+-    backgroundColor: '#FAEED1',
+-    width: 46,
+-    height: 46,
+-    borderRadius: 23,
+-    alignItems: 'center',
+-    justifyContent: 'center',
+-    marginBottom: 14,
+-    borderWidth: 1.5,
+-    borderColor: '#002244',
+-  },
+*** End Patch
+
